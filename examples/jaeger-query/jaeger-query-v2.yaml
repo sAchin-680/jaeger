@@ -1,0 +1,14 @@
+receivers:
+  nop: {}
+
+exporters:
+  nop: {}
+
+service:
+  pipelines:
+    traces:
+      receivers: [nop]
+      exporters: [nop]
+  telemetry:
+    logs:
+      level: "info"

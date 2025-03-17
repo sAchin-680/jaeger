@@ -4,7 +4,6 @@ on:
   merge_group:
   push:
     branches: [main]
-
   pull_request:
     branches: [main]
 
@@ -12,18 +11,20 @@ concurrency:
   group: ${{ github.workflow }}-${{ (github.event.pull_request && github.event.pull_request.number) || github.ref || github.run_id }}
   cancel-in-progress: true
 
-# See https://github.com/ossf/scorecard/blob/main/docs/checks.md#token-permissions
 permissions:
   contents: read
 
 jobs:
   crossdock:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        query_version: [v1, v2] # Run the job for both Jaeger Query v1 and v2
 
     steps:
     - uses: step-security/harden-runner@4d991eb9b905ef189e4c376166672c3f2f230481 # v2.11.0
       with:
-        egress-policy: audit # TODO: change to 'egress-policy: block' after couple of runs
+        egress-policy: audit # TODO: change to 'block' after a few runs
 
     - uses: actions/checkout@d632683dd7b4114ad314bca15554477dd762a938 # v4.2.0
       with:
@@ -49,6 +50,18 @@ jobs:
         DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         QUAY_TOKEN: ${{ secrets.QUAY_TOKEN }}
 
-    - name: Output crossdock logs
+    - name: Run Jaeger Query ${{ matrix.query_version }} integration test
+      run: |
+        if [ "${{ matrix.query_version }}" == "v1" ]; then
+      # Start Jaeger Query v1
+          jaeger-query --config-file=examples/jaeger-query-v1.yaml &
+        else
+      # Start Jaeger Query v2 (otelcol-based)
+          otelcol --config=examples/jaeger-query-v2.yaml &
+        fi
+        sleep 10
+        curl -f http://localhost:16686  # Validate that the query service is running
+    # Capture logs if the test fails
+        - name: Output crossdock logs
       run: make crossdock-logs
       if: ${{ failure() }}
