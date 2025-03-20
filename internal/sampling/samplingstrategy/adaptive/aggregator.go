@@ -23,6 +23,8 @@ const (
 	maxProbabilities = 10
 )
 
+var EnableAdaptiveSamplingWithoutTags = false // Default: false, requires explicit opt-in
+
 // aggregator is a kind of trace processor that watches for root spans
 // and calculates how many traces per service / per endpoint are being
 // produced. It periodically flushes these stats ("throughput") to storage.
@@ -161,21 +163,37 @@ func (a *aggregator) HandleRootSpan(span *span_model.Span) {
 // GetSamplerParams returns the sampler.type and sampler.param value if they are valid.
 func getSamplerParams(s *span_model.Span, logger *zap.Logger) (span_model.SamplerType, float64) {
 	samplerType := s.GetSamplerType()
+	samplerParam := 1.0 // Default probability
+
+	// If sampler.type is missing and feature flag is enabled, use default type
 	if samplerType == span_model.SamplerTypeUnrecognized {
-		return span_model.SamplerTypeUnrecognized, 0
+		if !EnableAdaptiveSamplingWithoutTags {
+			return span_model.SamplerTypeUnrecognized, 0
+		}
+		samplerType = span_model.SamplerTypeProbabilistic
 	}
+
+	// Fetch sampler.param tag
 	tag, ok := span_model.KeyValues(s.Tags).FindByKey(span_model.SamplerParamKey)
-	if !ok {
+	if ok {
+		var err error
+		samplerParam, err = samplerParamToFloat(tag)
+		if err != nil {
+			logger.With(
+				zap.String("traceID", s.TraceID.String()),
+				zap.String("spanID", s.SpanID.String()),
+				zap.Any("tag", tag),
+			).Warn("sampler.param tag is not a number")
+
+			// Fall back to default probability if flag is enabled
+			if !EnableAdaptiveSamplingWithoutTags {
+				return span_model.SamplerTypeUnrecognized, 0
+			}
+		}
+	} else if !EnableAdaptiveSamplingWithoutTags {
 		return span_model.SamplerTypeUnrecognized, 0
 	}
-	samplerParam, err := samplerParamToFloat(tag)
-	if err != nil {
-		logger.
-			With(zap.String("traceID", s.TraceID.String())).
-			With(zap.String("spanID", s.SpanID.String())).
-			Warn("sampler.param tag is not a number", zap.Any("tag", tag))
-		return span_model.SamplerTypeUnrecognized, 0
-	}
+
 	return samplerType, samplerParam
 }
 

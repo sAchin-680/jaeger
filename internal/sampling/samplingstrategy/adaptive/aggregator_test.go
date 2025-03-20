@@ -192,11 +192,14 @@ func TestGetSamplerParams(t *testing.T) {
 	logger := zap.NewNop()
 
 	tests := []struct {
+		name          string
 		tags          model.KeyValues
+		enableFlag    bool
 		expectedType  model.SamplerType
 		expectedParam float64
 	}{
 		{
+			name: "Valid probabilistic sampler with string param",
 			tags: model.KeyValues{
 				model.String("sampler.type", "probabilistic"),
 				model.String("sampler.param", "1e-05"),
@@ -205,6 +208,7 @@ func TestGetSamplerParams(t *testing.T) {
 			expectedParam: 0.00001,
 		},
 		{
+			name: "Valid probabilistic sampler with float64 param",
 			tags: model.KeyValues{
 				model.String("sampler.type", "probabilistic"),
 				model.Float64("sampler.param", 0.10404450002098709),
@@ -213,6 +217,7 @@ func TestGetSamplerParams(t *testing.T) {
 			expectedParam: 0.10404450002098709,
 		},
 		{
+			name: "Valid probabilistic sampler with stringified float param",
 			tags: model.KeyValues{
 				model.String("sampler.type", "probabilistic"),
 				model.String("sampler.param", "0.10404450002098709"),
@@ -221,6 +226,7 @@ func TestGetSamplerParams(t *testing.T) {
 			expectedParam: 0.10404450002098709,
 		},
 		{
+			name: "Probabilistic sampler with int64 param",
 			tags: model.KeyValues{
 				model.String("sampler.type", "probabilistic"),
 				model.Int64("sampler.param", 1),
@@ -229,6 +235,7 @@ func TestGetSamplerParams(t *testing.T) {
 			expectedParam: 1.0,
 		},
 		{
+			name: "Valid rate limiting sampler",
 			tags: model.KeyValues{
 				model.String("sampler.type", "ratelimiting"),
 				model.String("sampler.param", "1"),
@@ -237,6 +244,7 @@ func TestGetSamplerParams(t *testing.T) {
 			expectedParam: 1,
 		},
 		{
+			name: "Invalid sampler.type (float instead of string)",
 			tags: model.KeyValues{
 				model.Float64("sampler.type", 1.5),
 			},
@@ -244,6 +252,7 @@ func TestGetSamplerParams(t *testing.T) {
 			expectedParam: 0,
 		},
 		{
+			name: "Probabilistic sampler missing param",
 			tags: model.KeyValues{
 				model.String("sampler.type", "probabilistic"),
 			},
@@ -251,11 +260,21 @@ func TestGetSamplerParams(t *testing.T) {
 			expectedParam: 0,
 		},
 		{
-			tags:          model.KeyValues{},
+			name: "No tags, feature flag disabled",
+			tags: model.KeyValues{},
+			enableFlag: false,
 			expectedType:  model.SamplerTypeUnrecognized,
 			expectedParam: 0,
 		},
 		{
+			name: "No tags, feature flag enabled",
+			tags: model.KeyValues{},
+			enableFlag: true,
+			expectedType:  model.SamplerTypeProbabilistic,
+			expectedParam: 1.0,
+		},
+		{
+			name: "Lowerbound sampler with string param",
 			tags: model.KeyValues{
 				model.String("sampler.type", "lowerbound"),
 				model.String("sampler.param", "1"),
@@ -264,6 +283,7 @@ func TestGetSamplerParams(t *testing.T) {
 			expectedParam: 1,
 		},
 		{
+			name: "Lowerbound sampler with int64 param",
 			tags: model.KeyValues{
 				model.String("sampler.type", "lowerbound"),
 				model.Int64("sampler.param", 1),
@@ -272,6 +292,7 @@ func TestGetSamplerParams(t *testing.T) {
 			expectedParam: 1,
 		},
 		{
+			name: "Lowerbound sampler with float64 param",
 			tags: model.KeyValues{
 				model.String("sampler.type", "lowerbound"),
 				model.Float64("sampler.param", 0.5),
@@ -280,6 +301,7 @@ func TestGetSamplerParams(t *testing.T) {
 			expectedParam: 0.5,
 		},
 		{
+			name: "Invalid sampler.param (not a number) for lowerbound",
 			tags: model.KeyValues{
 				model.String("sampler.type", "lowerbound"),
 				model.String("sampler.param", "not_a_number"),
@@ -288,6 +310,7 @@ func TestGetSamplerParams(t *testing.T) {
 			expectedParam: 0,
 		},
 		{
+			name: "Invalid sampler.type and invalid sampler.param",
 			tags: model.KeyValues{
 				model.String("sampler.type", "not_a_type"),
 				model.String("sampler.param", "not_a_number"),
@@ -299,12 +322,15 @@ func TestGetSamplerParams(t *testing.T) {
 
 	for i, test := range tests {
 		tt := test
-		t.Run(strconv.Itoa(i), func(t *testing.T) {
-			span := &model.Span{}
-			span.Tags = tt.tags
+		t.Run(strconv.Itoa(i)+"_"+tt.name, func(t *testing.T) {
+			// Set the feature flag for this test case
+			EnableAdaptiveSamplingWithoutTags = tt.enableFlag
+
+			span := &model.Span{Tags: tt.tags}
 			actualType, actualParam := getSamplerParams(span, logger)
-			assert.Equal(t, tt.expectedType, actualType)
-			assert.InDelta(t, tt.expectedParam, actualParam, 0.01)
+
+			assert.Equal(t, tt.expectedType, actualType, "Test failed for case: %s", tt.name)
+			assert.InDelta(t, tt.expectedParam, actualParam, 0.01, "Test failed for case: %s", tt.name)
 		})
 	}
 }
