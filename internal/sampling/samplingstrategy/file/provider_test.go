@@ -349,14 +349,10 @@ func TestDeepCopy(t *testing.T) {
 }
 
 func TestAutoUpdateStrategyWithFile(t *testing.T) {
-	tempFile, _ := os.CreateTemp(t.TempDir(), "for_go_test_*.json")
-	require.NoError(t, tempFile.Close())
-	defer func() {
-		require.NoError(t, os.Remove(tempFile.Name()))
-	}()
+	dstFile := filepath.Join(t.TempDir(), "for_go_test.json")
 
 	// copy known fixture content into temp file which we can later overwrite
-	srcFile, dstFile := "fixtures/strategies.json", tempFile.Name()
+	srcFile := "fixtures/strategies.json"
 	srcBytes, err := os.ReadFile(srcFile)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(dstFile, srcBytes, 0o644))
