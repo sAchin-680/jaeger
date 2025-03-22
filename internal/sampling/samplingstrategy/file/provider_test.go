@@ -432,8 +432,7 @@ func TestAutoUpdateStrategyWithURL(t *testing.T) {
 }
 
 func TestAutoUpdateStrategyErrors(t *testing.T) {
-	tempDir := t.TempDir()
-	tempFile := filepath.Join(tempDir, "for_go_test.json")
+	tempFile := filepath.Join(t.TempDir(), "for_go_test.json")
 
 	zapCore, logs := observer.New(zap.InfoLevel)
 	logger := zap.New(zapCore)
